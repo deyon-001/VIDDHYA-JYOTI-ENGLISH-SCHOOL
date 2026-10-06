@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viddhya Jyoti English School</title><link rel="stylesheet" href="css/style.css"></head>
+<body>
+<header id="top"></header>
+<section class="hero"><div class="in">
+  <img class="crest" src="images/logo.jpeg" alt="Viddhya Jyoti English School logo">
+  <div>
+    <h1>Viddhya Jyoti English School</h1>
+    <p class="sub">Madi-1, Baruwa, Chitwan, Nepal · Estd. 2052</p>
+    <form class="find" action="results.html">
+      <strong>Check your exam result</strong>
+      <input name="cls" placeholder="Class" required aria-label="Class">
+      <input name="roll" placeholder="Roll no." required aria-label="Roll number">
+      <button>View result</button>
+    </form>
+  </div>
+</div></section>
+<main>
+  <div class="tiles" id="tiles"></div>
+  <h2>Latest notices</h2>
+  <div id="list"></div>
+  <p><a href="notices.html">See all notices</a></p>
+</main>
+<footer id="foot"></footer>
+<script src="js/app.js"></script>
+<script>
+topbar('index.html'); footer();
+const pub = loadNotices().filter(n => n.status === 'published').sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+const batches = new Set(loadResults().filter(r => r.status === 'published').map(r => r.batch));
+$('tiles').innerHTML =
+  `<a class="tile" href="notices.html"><em>${pub.length}</em>Notices on the board</a>` +
+  `<a class="tile" href="results.html"><em>${batches.size}</em>Published result sheets</a>`;
+$('list').innerHTML = pub.length ? pub.slice(0, 3).map(n => noteHTML(n)).join('') : '<div class="empty">No notices yet. Check back soon.</div>';
+</script>
+</body></html>

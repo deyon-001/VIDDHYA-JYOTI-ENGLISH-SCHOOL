@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notices - Viddhya Jyoti English School</title><link rel="stylesheet" href="css/style.css"></head>
+<body>
+<header id="top"></header>
+<main>
+  <h2>Notice board</h2>
+  <div class="tools">
+    <input type="search" id="search" placeholder="Search notices" aria-label="Search notices">
+    <select id="cat" aria-label="Filter by category"></select>
+  </div>
+  <div id="list"></div>
+</main>
+<footer id="foot"></footer>
+<script src="js/app.js"></script>
+<script>
+topbar('notices.html'); footer(); fillCategories($('cat'), true);
+function render() {
+  const q = $('search').value.toLowerCase();
+  const items = loadNotices().filter(n => n.status === 'published')
+    .filter(n => !$('cat').value || n.category === $('cat').value)
+    .filter(n => (n.title + n.message).toLowerCase().includes(q))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  $('list').innerHTML = items.length ? items.map(n => noteHTML(n)).join('')
+    : '<div class="empty">No notices found. Try a different search or category.</div>';
+}
+$('search').oninput = render; $('cat').onchange = render; render();
+</script>
+</body></html>

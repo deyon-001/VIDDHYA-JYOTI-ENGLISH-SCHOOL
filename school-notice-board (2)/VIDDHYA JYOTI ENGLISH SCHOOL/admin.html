@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Principal - Viddhya Jyoti English School</title><link rel="stylesheet" href="css/style.css"></head>
+<body>
+<header id="top"></header>
+<main>
+  <div id="gate" class="card"></div>
+  <div id="panel" hidden>
+    <div class="tabs">
+      <button data-t="n">Notices</button><button data-t="r" class="alt">Results</button><button data-t="s" class="alt">Settings</button>
+    </div>
+
+    <section id="t-n">
+      <form id="nf" class="card stack">
+        <h2 id="nTitle">New notice</h2>
+        <label>Title <input id="title" required maxlength="100"></label>
+        <label>Category <select id="category"></select></label>
+        <label>Date <input type="date" id="date" required></label>
+        <label>Message <textarea id="message" rows="5" required></textarea></label>
+        <div class="row">
+          <button type="submit" value="published">Publish notice</button>
+          <button type="submit" value="draft" class="alt">Save as draft</button>
+          <button type="button" id="ncancel" class="alt" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <h2>All notices</h2><div id="manage"></div>
+    </section>
+
+    <section id="t-r" hidden>
+      <form id="rf" class="card stack">
+        <h2>Publish student results</h2>
+        <label>Exam name <input id="rExam" required placeholder="First Terminal Exam 2083"></label>
+        <label>Class <input id="rCls" required placeholder="8"></label>
+        <label>Full marks per subject <input type="number" id="rFull" value="100" min="1" required></label>
+        <label>Marks sheet (CSV: first row is the header; then one student per line)
+          <textarea id="rCsv" rows="8" required placeholder="Roll,Name,Maths,English,Science&#10;1,Sita Sharma,85,78,90&#10;2,Ram Thapa,67,72,59"></textarea></label>
+        <div class="row">
+          <button type="submit" value="published">Publish results</button>
+          <button type="submit" value="draft" class="alt">Save as draft</button>
+        </div>
+        <small>Tip: in Excel or Google Sheets, copy the table, save as CSV, and paste it here.</small>
+      </form>
+      <h2>Result sheets</h2><div id="rmanage"></div>
+    </section>
+
+    <section id="t-s" hidden>
+      <form id="pf" class="card stack">
+        <h2>Change principal password</h2>
+        <label>Current password <input type="password" id="cur" required></label>
+        <label>New password (6+ characters) <input type="password" id="new" minlength="6" required></label>
+        <button>Change password</button>
+      </form>
+      <div class="card stack">
+        <h2>Backup</h2>
+        <p>Data is stored in this browser. Download a backup regularly, and restore it on another computer.</p>
+        <div class="row"><button id="exp" class="alt">Download backup</button>
+        <label class="alt">Restore backup <input type="file" id="imp" accept=".json"></label></div>
+      </div>
+      <button id="logout" class="alt">Log out</button>
+    </section>
+  </div>
+</main>
+<footer id="foot"></footer>
+<script src="js/app.js"></script>
+<script>
+topbar('admin.html'); footer(); fillCategories($('category'), false); $('date').value = today();
+const TTL = 30 * 60 * 1000;
+const authed = () => Date.now() - Number(sessionStorage.getItem('vjes_auth') || 0) < TTL;
+const touch = () => sessionStorage.setItem('vjes_auth', Date.now());
+const guard = () => { if (!authed()) { gate(); return false; } touch(); return true; };
+let editId = null;
+
+async function gate() {
+  const hs = localStorage.getItem(PK), ok = authed() && hs;
+  $('panel').hidden = !ok; $('gate').hidden = !!ok;
+  if (ok) { renderN(); renderR(); return; }
+  if (!hs) {
+    $('gate').innerHTML = `<h2>Principal setup</h2><p>Create the principal's password. Only the principal should know it.</p>
+      <form id="gf" class="stack"><label>New password (6+ characters)<input type="password" id="p1" minlength="6" required></label>
+      <label>Confirm password<input type="password" id="p2" required></label><button>Create password</button><small id="gm"></small></form>`;
+    $('gf').onsubmit = async e => {
+      e.preventDefault();
+      if ($('p1').value !== $('p2').value) { $('gm').textContent = 'Passwords do not match.'; return; }
+      localStorage.setItem(PK, await hash($('p1').value)); touch(); gate();
+    };
+  } else {
+    $('gate').innerHTML = `<h2>Principal login</h2><form id="gf" class="stack"><label>Password<input type="password" id="p1" required></label>
+      <button>Log in</button><small id="gm"></small></form>`;
+    $('gf').onsubmit = async e => {
+      e.preventDefault();
+      const L = get('vjes_lock', { n: 0, until: 0 });
+      if (Date.now() < L.until) { $('gm').textContent = 'Too many wrong attempts. Try again in a few minutes.'; return; }
+      if (await hash($('p1').value) === hs) { put('vjes_lock', { n: 0, until: 0 }); touch(); gate(); return; }
+      L.n++; if (L.n >= 5) { L.until = Date.now() + 5 * 60 * 1000; L.n = 0; }
+      put('vjes_lock', L); $('gm').textContent = 'Wrong password.';
+    };
+  }
+}
+setInterval(() => { if (!$('panel').hidden && !authed()) gate(); }, 30000);
+
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('alt', x !== b));
+  ['n', 'r', 's'].forEach(t => $('t-' + t).hidden = t !== b.dataset.t);
+});
+
+// Notices
+function resetN() { editId = null; $('nf').reset(); $('date').value = today(); $('nTitle').textContent = 'New notice'; $('ncancel').hidden = true; }
+$('ncancel').onclick = resetN;
+$('nf').onsubmit = e => {
+  e.preventDefault(); if (!guard()) return;
+  const status = e.submitter.value, all = loadNotices();
+  const d = { title: $('title').value.trim(), category: $('category').value, date: $('date').value, message: $('message').value.trim(), author: 'Principal', status };
+  if (editId) { const i = all.findIndex(n => n.id === editId); all[i] = { ...all[i], ...d }; } else all.push({ id: Date.now(), ...d });
+  saveNotices(all); alert(status === 'published' ? 'Published' : 'Draft saved'); resetN(); renderN();
+};
+function renderN() {
+  const all = loadNotices().sort((a, b) => b.id - a.id);
+  $('manage').innerHTML = all.length ? all.map(n => noteHTML(n, `<span class="badge ${n.status}">${n.status}</span>`)).join('')
+    : '<div class="empty">No notices yet. Fill in the form above and publish one.</div>';
+  $('manage').querySelectorAll('.row').forEach(r => r.innerHTML =
+    `<button class="alt" data-a="edit">Edit</button><button class="alt" data-a="tog">${all.find(n => n.id == r.dataset.id).status === 'published' ? 'Unpublish' : 'Publish'}</button><button class="danger" data-a="del">Delete</button>`);
+}
+$('manage').onclick = e => {
+  const a = e.target.dataset.a; if (!a || !guard()) return;
+  const id = Number(e.target.closest('.row').dataset.id); let all = loadNotices(); const n = all.find(x => x.id === id);
+  if (a === 'edit') {
+    editId = id; $('title').value = n.title; $('category').value = n.category; $('date').value = n.date; $('message').value = n.message;
+    $('nTitle').textContent = 'Edit notice'; $('ncancel').hidden = false; scrollTo({ top: 0, behavior: 'smooth' }); return;
+  }
+  if (a === 'del' && confirm('Delete this notice?')) all = all.filter(x => x.id !== id);
+  if (a === 'tog') n.status = n.status === 'published' ? 'draft' : 'published';
+  saveNotices(all); renderN();
+};
+
+// Results
+function parseCsv(txt, full) {
+  const rows = txt.trim().split(/\r?\n/).map(l => l.split(',').map(c => c.trim())).filter(r => r.length > 1);
+  if (rows.length < 2) throw 'Add a header row and at least one student.';
+  const head = rows[0]; if (head.length < 3) throw 'Header needs Roll, Name and at least one subject.';
+  return rows.slice(1).map((r, i) => {
+    if (r.length !== head.length) throw `Row ${i + 2} has ${r.length} columns; expected ${head.length}.`;
+    const subjects = head.slice(2).map((n, j) => {
+      const m = Number(r[j + 2]);
+      if (r[j + 2] === '' || isNaN(m) || m < 0 || m > full) throw `Row ${i + 2}: marks for ${n} must be between 0 and ${full}.`;
+      return { n, m, f: full };
+    });
+    return { roll: r[0], name: r[1], subjects };
+  });
+}
+$('rf').onsubmit = e => {
+  e.preventDefault(); if (!guard()) return;
+  try {
+    const status = e.submitter.value, batch = String(Date.now());
+    const list = parseCsv($('rCsv').value, Number($('rFull').value));
+    const all = loadResults();
+    list.forEach((s, i) => all.push({ id: batch + '-' + i, batch, exam: $('rExam').value.trim(), cls: $('rCls').value.trim(), status, ...s }));
+    saveResults(all); $('rf').reset(); $('rFull').value = 100; renderR();
+    alert(status === 'published' ? `Published results for ${list.length} students` : 'Draft saved');
+  } catch (x) { alert(typeof x === 'string' ? x : 'Could not read the marks sheet.'); }
+};
+function renderR() {
+  const m = {}; loadResults().forEach(r => (m[r.batch] = m[r.batch] || { ...r, count: 0 }).count++);
+  const b = Object.values(m);
+  $('rmanage').innerHTML = b.length ? b.map(x => `<div class="note General"><h3>${esc(x.exam)} · Class ${esc(x.cls)}</h3>
+    <div class="meta">${x.count} students <span class="badge ${x.status}">${x.status}</span></div>
+    <div class="row" data-b="${x.batch}"><button class="alt" data-a="rtog">${x.status === 'published' ? 'Unpublish' : 'Publish'}</button><button class="danger" data-a="rdel">Delete</button></div></div>`).join('')
+    : '<div class="empty">No results yet. Paste a marks sheet above and publish.</div>';
+}
+$('rmanage').onclick = e => {
+  const a = e.target.dataset.a; if (!a || !guard()) return;
+  const b = e.target.closest('.row').dataset.b; let all = loadResults();
+  if (a === 'rdel' && confirm('Delete this whole result sheet?')) all = all.filter(r => r.batch !== b);
+  if (a === 'rtog') all.forEach(r => { if (r.batch === b) r.status = r.status === 'published' ? 'draft' : 'published'; });
+  saveResults(all); renderR();
+};
+
+// Settings
+$('pf').onsubmit = async e => {
+  e.preventDefault(); if (!guard()) return;
+  if (await hash($('cur').value) !== localStorage.getItem(PK)) { alert('Current password is wrong.'); return; }
+  localStorage.setItem(PK, await hash($('new').value)); $('pf').reset(); alert('Password changed');
+};
+$('exp').onclick = () => {
+  if (!guard()) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ notices: loadNotices(), results: loadResults() })], { type: 'application/json' }));
+  a.download = 'school-backup-' + today() + '.json'; a.click();
+};
+$('imp').onchange = async e => {
+  if (!guard() || !e.target.files[0]) return;
+  try {
+    const d = JSON.parse(await e.target.files[0].text());
+    if (!Array.isArray(d.notices) || !Array.isArray(d.results)) throw 0;
+    if (confirm('Replace all current notices and results with this backup?')) { saveNotices(d.notices); saveResults(d.results); renderN(); renderR(); alert('Backup restored'); }
+  } catch (x) { alert('This file is not a valid backup.'); }
+};
+$('logout').onclick = () => { sessionStorage.removeItem('vjes_auth'); location.reload(); };
+gate();
+</script>
+</body></html>

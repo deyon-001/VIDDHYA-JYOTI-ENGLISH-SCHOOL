@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results - Viddhya Jyoti English School</title><link rel="stylesheet" href="css/style.css"></head>
+<body>
+<header id="top"></header>
+<main>
+  <h2>Exam results</h2>
+  <form id="f" class="tools">
+    <input id="cls" placeholder="Class (e.g. 8)" required aria-label="Class">
+    <input id="roll" placeholder="Roll number" required aria-label="Roll number">
+    <button>View result</button>
+  </form>
+  <div id="out"></div>
+  <button class="alt noprint" id="print" hidden onclick="print()">Print result</button>
+</main>
+<footer id="foot"></footer>
+<script src="js/app.js"></script>
+<script>
+topbar('results.html'); footer();
+function show() {
+  const c = $('cls').value.trim().toLowerCase(), r = $('roll').value.trim();
+  const hits = loadResults().filter(x => x.status === 'published' && x.cls.toLowerCase() === c && x.roll === r);
+  $('out').innerHTML = hits.length ? hits.map(resultHTML).join('')
+    : `<div class="empty">No published result found for Class ${esc($('cls').value)}, Roll ${esc($('roll').value)}. Check the class and roll number.</div>`;
+  $('print').hidden = !hits.length;
+}
+$('f').onsubmit = e => { e.preventDefault(); show(); };
+const p = new URLSearchParams(location.search);
+if (p.get('cls') && p.get('roll')) { $('cls').value = p.get('cls'); $('roll').value = p.get('roll'); show(); }
+</script>
+</body></html>
